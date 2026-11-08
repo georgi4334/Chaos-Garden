@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { DB, type Database } from '../database/database.module.js';
 import { targets } from '../database/schema.js';
 
@@ -16,7 +16,11 @@ export class TargetsService {
   }
 
   list(gardenId: string) {
-    return this.db.select().from(targets).where(eq(targets.gardenId, gardenId));
+    return this.db
+      .select()
+      .from(targets)
+      .where(eq(targets.gardenId, gardenId))
+      .orderBy(asc(targets.createdAt), asc(targets.id));
   }
 
   async get(gardenId: string, targetId: string) {

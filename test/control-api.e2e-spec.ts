@@ -125,6 +125,31 @@ describe('Control API (e2e)', () => {
       await http().delete(`/gardens/${g.id}`).set(h).expect(204);
     });
 
+    it('keeps rules and targets in creation order, even after an update', async () => {
+      const g = await newGarden();
+      const h = auth(g.adminToken);
+      const mk = async (name: string) =>
+        (await http().post(`/gardens/${g.id}/targets`).set(h).send({ name, baseUrl: 'http://localhost:4000' }).expect(201)).body;
+      const t1 = await mk('first');
+      await mk('second');
+      const rulesUrl = `/gardens/${g.id}/targets/${t1.id}/rules`;
+      const types = ['drop', 'corrupt', 'error'];
+      const ids: string[] = [];
+      for (const type of types) {
+        const body = type === 'error' ? { type, params: { status: 500 } } : { type };
+        ids.push((await http().post(rulesUrl).set(h).send(body).expect(201)).body.id);
+      }
+
+      // Updating the oldest rule rewrites its row; the list order must not change.
+      await http().patch(`${rulesUrl}/${ids[0]}`).set(h).send({ enabled: false }).expect(200);
+      await http().patch(`/gardens/${g.id}/targets/${t1.id}`).set(h).send({ name: 'first', baseUrl: 'http://localhost:4001' }).expect(200);
+
+      const rules = (await http().get(rulesUrl).set(h).expect(200)).body;
+      expect(rules.map((r: { type: string }) => r.type)).toEqual(types);
+      const targets = (await http().get(`/gardens/${g.id}/targets`).set(h).expect(200)).body;
+      expect(targets.map((t: { name: string }) => t.name)).toEqual(['first', 'second']);
+    });
+
     it("cannot reach another garden's target through your own garden id", async () => {
       const a = await newGarden('A');
       const b = await newGarden('B');
