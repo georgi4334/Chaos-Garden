@@ -40,3 +40,7 @@ npm run test:e2e
 ```
 
 After changing `src/database/schema.ts`, run `npm run db:generate` and commit the new migration.
+
+## Internal endpoint (for other services)
+
+`GET /internal/gardens/:gardenId/config` returns a garden's targets and enabled rules. It is used by the fault proxy and requires the `x-internal-key` header to match `INTERNAL_API_KEY`. If `INTERNAL_API_KEY` is not set, it rejects every request.
