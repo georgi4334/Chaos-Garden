@@ -5,6 +5,8 @@ import { configureApp } from './app.setup.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Behind a load balancer or reverse proxy, trust X-Forwarded-For so req.ip is the client.
+  if (process.env.TRUST_PROXY === 'true') app.getHttpAdapter().getInstance().set('trust proxy', 1);
   configureApp(app);
 
   const doc = SwaggerModule.createDocument(

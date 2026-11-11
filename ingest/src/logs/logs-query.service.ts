@@ -4,7 +4,17 @@ import { DB, type Database } from '../database/database.module.js';
 import { requestLogs, requestStatsMinute } from '../database/schema.js';
 import { minuteOf } from './aggregate.js';
 
-const COUNT_COLUMNS = ['total', 'ok', 'slow', 'error', 'drop', 'corrupt', 'targetError', 'noResponse'] as const;
+const COUNT_COLUMNS = [
+  'total',
+  'ok',
+  'slow',
+  'error',
+  'drop',
+  'corrupt',
+  'targetError',
+  'noResponse',
+  'rateLimited',
+] as const;
 type CountColumn = (typeof COUNT_COLUMNS)[number];
 export type Counts = Record<CountColumn, number> & { avgDurationMs: number | null };
 
@@ -57,6 +67,7 @@ export class LogsQueryService {
         corrupt: sum('corrupt'),
         targetError: sum('targetError'),
         noResponse: sum('noResponse'),
+        rateLimited: sum('rateLimited'),
         durationMsSum: sql<number>`coalesce(sum(${requestStatsMinute.durationMsSum}), 0)::bigint`,
       })
       .from(requestStatsMinute)
@@ -72,7 +83,7 @@ export class LogsQueryService {
           acc.durationMsSum += Number(r.durationMsSum);
           return acc;
         },
-        { total: 0, ok: 0, slow: 0, error: 0, drop: 0, corrupt: 0, targetError: 0, noResponse: 0, durationMsSum: 0 },
+        { total: 0, ok: 0, slow: 0, error: 0, drop: 0, corrupt: 0, targetError: 0, noResponse: 0, rateLimited: 0, durationMsSum: 0 },
       ),
     );
     return { from, to, totals, buckets };

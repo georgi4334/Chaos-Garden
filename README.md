@@ -53,11 +53,16 @@ npm run test:e2e
 
 After changing `src/database/schema.ts`, run `npm run db:generate` and commit the new migration.
 
+## Rate limits
+
+- **Per garden (enforced by the proxy).** Each garden has `rateLimitRps` (default 10) and `rateLimitBurst` (default 20). The owner changes them with `PATCH /gardens/:gardenId`, up to 50 and 100. The proxy receives them in the garden config and runs a token bucket in Redis.
+- **Garden creation (enforced here).** `POST /gardens` allows `GARDEN_CREATE_LIMIT` gardens per IP address per `GARDEN_CREATE_WINDOW_MS` (default 10 per hour), then answers 429 with `Retry-After`. The counter lives in this process's memory, so with several instances each counts separately. Behind a reverse proxy, set `TRUST_PROXY=true` so the client's address is used.
+
 ## Request logs and stats
 
 `/requests` (newest first, page back with `before=<nextBefore>`) and `/stats` (per-minute counts by outcome, default the last 60 minutes) are served by the separate ingest service. This API checks the garden's admin token, then reads from the ingest service at `INGEST_URL` with `INTERNAL_API_KEY`. If the ingest service is down, these two endpoints answer 503 and everything else keeps working.
 
-Outcomes: `ok`, `slow` (delayed), `error` (injected), `drop`, `corrupt`, `target_error` (the target itself returned 4xx/5xx), `no_response`.
+Outcomes: `ok`, `slow` (delayed), `error` (injected), `drop`, `corrupt`, `target_error` (the target itself returned 4xx/5xx), `no_response`, `rate_limited` (refused by the garden's rate limit).
 
 The compose file creates the ingest service's database (`chaos_ingest`) on first start via `infra/postgres-init/`. If your Postgres volume already exists, create it once by hand: `CREATE DATABASE chaos_ingest OWNER chaos;`
 

@@ -15,11 +15,12 @@ describe('aggregateByMinute', () => {
       { gardenId: G, targetId: 'a', occurredAt: at('2026-11-11T10:00:30Z'), outcome: 'target_error', durationMs: 7 },
       { gardenId: G, targetId: 'a', occurredAt: at('2026-11-11T10:01:00Z'), outcome: 'slow', durationMs: 900 },
       { gardenId: G, targetId: 'b', occurredAt: at('2026-11-11T10:00:10Z'), outcome: 'no_response', durationMs: 3 },
+      { gardenId: G, targetId: 'b', occurredAt: at('2026-11-11T10:00:20Z'), outcome: 'rate_limited', durationMs: 1 },
     ]);
     expect(buckets).toHaveLength(3);
     const first = buckets.find((b) => b.targetId === 'a' && b.bucket.toISOString() === '2026-11-11T10:00:00.000Z')!;
     expect(first).toMatchObject({ total: 3, ok: 1, error: 1, targetError: 1, slow: 0, durationMsSum: 22 });
-    expect(buckets.find((b) => b.targetId === 'b')).toMatchObject({ total: 1, noResponse: 1 });
+    expect(buckets.find((b) => b.targetId === 'b')).toMatchObject({ total: 2, noResponse: 1, rateLimited: 1 });
   });
 
   it('returns nothing for no rows', () => {

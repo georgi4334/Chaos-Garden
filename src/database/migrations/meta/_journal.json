@@ -8,6 +8,13 @@
       "when": 1793897328663,
       "tag": "0000_premium_freak",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794389465136,
+      "tag": "0001_whole_thunderbolts",
+      "breakpoints": true
     }
   ]
 }

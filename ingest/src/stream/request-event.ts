@@ -15,9 +15,17 @@ export interface RequestEventV1 {
   ruleIds: string[];
 }
 
-export type Outcome = 'ok' | 'slow' | 'error' | 'drop' | 'corrupt' | 'target_error' | 'no_response';
+export type Outcome =
+  | 'ok'
+  | 'slow'
+  | 'error'
+  | 'drop'
+  | 'corrupt'
+  | 'target_error'
+  | 'no_response'
+  | 'rate_limited';
 
-export const OUTCOMES: Outcome[] = ['ok', 'slow', 'error', 'drop', 'corrupt', 'target_error', 'no_response'];
+export const OUTCOMES: Outcome[] = ['ok', 'slow', 'error', 'drop', 'corrupt', 'target_error', 'no_response', 'rate_limited'];
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === 'string');
@@ -61,6 +69,7 @@ export function parseEntry(fields: string[]): ParseResult {
 
 /** One outcome per request. Injected faults win over what the target did. */
 export function classify(event: Pick<RequestEventV1, 'faults' | 'status'>): Outcome {
+  if (event.faults.includes('rate_limited')) return 'rate_limited'; // the proxy refused it before any fault
   if (event.faults.includes('drop')) return 'drop';
   if (event.faults.includes('error')) return 'error';
   if (event.status === null) return 'no_response';

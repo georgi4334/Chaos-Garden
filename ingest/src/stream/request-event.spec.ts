@@ -53,6 +53,7 @@ describe('classify', () => {
     [['latency'], 500, 'target_error'],
     [[], null, 'no_response'],
     [['latency'], null, 'no_response'],
+    [['rate_limited'], 429, 'rate_limited'],
   ] as const)('faults %j with status %s -> %s', (faults, status, expected) => {
     expect(classify({ faults: [...faults], status })).toBe(expected);
   });
