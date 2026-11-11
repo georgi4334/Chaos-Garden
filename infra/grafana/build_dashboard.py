@@ -83,9 +83,18 @@ add(timeseries("Latency, 95th percentile", "95% of requests finished faster than
                [(f"histogram_quantile(0.95, sum by (le, service) (rate(http_server_requests_seconds_bucket[{RI}])))", "{{service}}")], "s"), 16, 1, 8, 8)
 
 row("Proxy", 9)
-fold = f'label_replace(rate(chaos_proxy_requests_total[{RI}]), "outcome", "other", "outcome", "target_error|no_response|rate_limited")'
-add(timeseries("Proxied requests by outcome", "Stacked. \"other\" is an error from the target, no response, or refused by a garden's rate limit (the same grouping as the web dashboard).",
-               [(f"sum by (outcome) ({fold})", "{{outcome}}")], "reqps", stacked=True,
+# One query per outcome, in the web dashboard's order: Grafana stacks series in query order,
+# and the outcome palette was validated for exactly these neighbours (bottom to top).
+OUTCOME_QUERIES = [
+    ("ok", 'outcome="ok"'),
+    ("slow", 'outcome="slow"'),
+    ("error", 'outcome="error"'),
+    ("corrupt", 'outcome="corrupt"'),
+    ("drop", 'outcome="drop"'),
+    ("other", 'outcome=~"target_error|no_response|rate_limited"'),
+]
+add(timeseries("Proxied requests by outcome", "Stacked, in the same order and colors as the web dashboard. \"other\" is an error from the target, no response, or refused by a garden's rate limit.",
+               [(f"sum(rate(chaos_proxy_requests_total{{{sel}}}[{RI}])) or vector(0)", name) for name, sel in OUTCOME_QUERIES], "reqps", stacked=True,
                overrides=[color_override(o, OUTCOME_COLORS[o]) for o in OUTCOME_ORDER]), 0, 10, 12, 8)
 add(timeseries("Rate limit decisions", "allowed, limited (429), or skipped (Redis unavailable or limiting off: the proxy fails open).",
                [(f"sum by (decision) (rate(chaos_proxy_rate_limit_decisions_total[{RI}]))", "{{decision}}")], "reqps"), 12, 10, 6, 8)
