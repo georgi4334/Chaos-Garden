@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { DB, type Database } from '../database/database.module.js';
 import { faultRules } from '../database/schema.js';
 import { TargetsService } from '../targets/targets.service.js';
@@ -33,7 +33,13 @@ export class RulesService {
 
   async list(gardenId: string, targetId: string) {
     await this.targets.get(gardenId, targetId);
-    return this.db.select().from(faultRules).where(eq(faultRules.targetId, targetId));
+    // Explicit order: without it Postgres returns rows in storage order, and an
+    // UPDATE moves a row to the end, so toggling a rule would reshuffle the list.
+    return this.db
+      .select()
+      .from(faultRules)
+      .where(eq(faultRules.targetId, targetId))
+      .orderBy(asc(faultRules.createdAt), asc(faultRules.id));
   }
 
   async get(gardenId: string, targetId: string, ruleId: string) {
