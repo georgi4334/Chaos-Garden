@@ -53,6 +53,33 @@ npm run test:e2e
 
 After changing `src/database/schema.ts`, run `npm run db:generate` and commit the new migration.
 
+## Run everything in containers
+
+One command starts the whole system: Postgres, Redis, migrations, the control API, the ingest service, the proxy, the web dashboard, Prometheus and Grafana.
+
+```bash
+npm run stack:up       # uses the images CI publishes to ghcr.io (needs Docker)
+npm run stack:build    # builds the images from source instead
+npm run stack:down
+```
+
+- Dashboard http://localhost:3001, control API :3000, proxy :3100, ingest :3200, Prometheus :9090, Grafana :3300.
+- `stack:build` needs the three repos cloned side by side (`Chaos-Garden`, `chaos-garden-proxy`, `chaos-garden-web`), or `PROXY_SOURCE` / `WEB_SOURCE` pointing at them.
+- Images are published from `main`, so before the first merge only `stack:build` works. If the repos are private, their images are too: `docker login ghcr.io` first.
+- Migrations run as one-shot containers before the services start.
+- To proxy an API running on your machine, use the target base URL `http://host.docker.internal:<port>`.
+- This setup is for local use: a shared default `INTERNAL_API_KEY`, private targets allowed, and Grafana without login.
+
+Each service's image is a two-stage build on `node:22-bookworm-slim`: it builds with dev dependencies, then keeps only the production dependencies and compiled code, and runs as the unprivileged `node` user with a health check. `node dist/database/migrate.js` applies migrations with drizzle-orm's runtime migrator (no drizzle-kit in the image).
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and on `main`:
+
+1. **Control API:** lint, build, unit tests, migrations, e2e tests against a Postgres service container.
+2. **Ingest service:** the same, against Postgres and Redis.
+3. **Images:** builds both Docker images on every PR, so a broken Dockerfile fails CI; on `main` it also pushes them to `ghcr.io/<owner>/chaos-garden-control-api` and `chaos-garden-ingest` (tags `main` and `sha-<commit>`).
+
 ## Observability
 
 Each service (control API, ingest, proxy) has the same three pieces, in `src/observability/`:

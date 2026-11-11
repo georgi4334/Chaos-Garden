@@ -51,7 +51,7 @@ export class LogWriter {
       if (inserted.length === 0) return 0;
 
       const buckets = aggregateByMinute(inserted.map((r) => ({ ...r, outcome: r.outcome as Outcome })));
-      const add = (column: keyof typeof requestStatsMinute.$inferInsert & string) =>
+      const add = (column: Extract<keyof typeof requestStatsMinute.$inferInsert, string>) =>
         sql.raw(`"request_stats_minute"."${toSnake(column)}" + excluded."${toSnake(column)}"`);
 
       await tx
