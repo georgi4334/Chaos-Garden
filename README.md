@@ -54,6 +54,10 @@ npm run test:e2e
 
 After changing `src/database/schema.ts`, run `npm run db:generate` and commit the new migration.
 
+## Deploy for free
+
+[DEPLOY.md](DEPLOY.md) puts the whole system online at no cost: the backend on Render (`render.yaml` Blueprint, with the Go proxy), Postgres on Neon, and the dashboard on Vercel. It covers every step and the free-plan limits.
+
 ## Run everything in containers
 
 One command starts the whole system: Postgres, Redis, migrations, the control API, the ingest service, the proxy, the web dashboard, Prometheus and Grafana.
