@@ -4,15 +4,28 @@ Lives in the `ingest/` folder of the Chaos-Garden repo, next to the control API,
 
 Turns the fault proxy's request events into request logs and per-minute stats.
 
-```
-proxy ──XADD──▶ Redis Stream "chaos:requests" ──XREADGROUP──▶ ingest ──▶ Postgres (chaos_ingest)
-                                                                 ▲
-control API ──GET /internal/gardens/:id/requests|stats ──────────┘
+```mermaid
+flowchart LR
+    proxy["Fault proxy"] -- "XADD" --> S[("Redis stream<br/>chaos:requests")]
+    S -- "XREADGROUP" --> ingest["Ingest service"]
+    ingest --> db[("Postgres<br/>chaos_ingest")]
+    api["Control API"] -- "GET /internal/gardens/:id/<br/>requests and stats" --> ingest
 ```
 
 This service owns its own database (`chaos_ingest`). Nothing else writes to it, and other services read it only through this service's internal API.
 
 ## How events are processed
+
+```mermaid
+flowchart LR
+    S[("Redis stream<br/>chaos:requests")] -- "XREADGROUP" --> V{"Valid<br/>event?"}
+    V -- no --> DL[("Dead-letter<br/>stream")]
+    V -- yes --> TX["One transaction:<br/>store new logs,<br/>add per-minute stats"]
+    TX -- committed --> ACK["XACK"]
+    TX -- failed --> P["Stays pending"]
+    P -- "idle 30 s:<br/>claim, retry" --> TX
+    P -- "5 attempts" --> DL
+```
 
 - **Consumer group.** Every instance joins the `ingest` group, and each event is delivered to one instance. Run more instances to share the load; give each a unique `CONSUMER_NAME` (the default is hostname plus process id).
 - **At-least-once.** An event is acknowledged (`XACK`) only after its batch is committed to Postgres. If the service crashes mid-batch, the events stay pending and are picked up again.
