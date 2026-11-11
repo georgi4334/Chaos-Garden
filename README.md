@@ -4,6 +4,16 @@ Chaos Garden is a fault-injection platform for frontend developers. You register
 
 This repository is the **control API** (NestJS + TypeScript + Postgres via Drizzle). It manages gardens, targets and fault rules. Other services (fault proxy, ingest worker, web dashboard) will live in their own repositories.
 
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `/` (`src/`, `test/`) | the control API |
+| `ingest/` | the ingest service: a separate Node project with its own `package.json`, database and tests ([README](ingest/README.md)) |
+| `infra/` | Docker Compose for Postgres and Redis |
+
+The root `npm test` and build cover only the control API. Run the ingest service's commands from `ingest/`.
+
 ## How access works (no registration)
 
 `POST /gardens` creates a garden and returns an `adminToken` **once**. Only its SHA-256 hash is stored. Send it as `Authorization: Bearer <adminToken>` on every other call. A token only works for its own garden.
