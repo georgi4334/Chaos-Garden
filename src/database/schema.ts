@@ -1,5 +1,6 @@
 import {
   boolean,
+  integer,
   jsonb,
   numeric,
   pgEnum,
@@ -20,6 +21,9 @@ export const gardens = pgTable('gardens', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull(),
   adminTokenHash: text('admin_token_hash').notNull(),
+  /** Proxy rate limit for this garden: sustained requests per second, and burst size. */
+  rateLimitRps: integer('rate_limit_rps').notNull().default(10),
+  rateLimitBurst: integer('rate_limit_burst').notNull().default(20),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

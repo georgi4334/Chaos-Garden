@@ -4,6 +4,17 @@ Chaos Garden is a fault-injection platform for frontend developers. You register
 
 This repository is the **control API** (NestJS + TypeScript + Postgres via Drizzle). It manages gardens, targets and fault rules. Other services (fault proxy, ingest worker, web dashboard) will live in their own repositories.
 
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `/` (`src/`, `test/`) | the control API |
+| `ingest/` | the ingest service: a separate Node project with its own `package.json`, database and tests ([README](ingest/README.md)) |
+| `contracts/` | the request-event contract (JSON Schema and example events) shared with the proxy ([README](contracts/README.md)) |
+| `infra/` | Docker Compose for Postgres, Redis, Prometheus and Grafana, plus their config |
+
+The root `npm test` and build cover only the control API. Run the ingest service's commands from `ingest/`.
+
 ## How access works (no registration)
 
 `POST /gardens` creates a garden and returns an `adminToken` **once**. Only its SHA-256 hash is stored. Send it as `Authorization: Bearer <adminToken>` on every other call. A token only works for its own garden.
@@ -18,6 +29,8 @@ This repository is the **control API** (NestJS + TypeScript + Postgres via Drizz
 | GET / PATCH / DELETE | `/gardens/:gardenId/targets/:targetId` | token |
 | GET / POST | `/gardens/:gardenId/targets/:targetId/rules` | token |
 | GET / PATCH / DELETE | `/gardens/:gardenId/targets/:targetId/rules/:ruleId` | token |
+| GET | `/gardens/:gardenId/requests?limit=&targetId=&before=` | token |
+| GET | `/gardens/:gardenId/stats?minutes=&targetId=` | token |
 | GET | `/health` | none |
 
 Rule types and their `params`: `latency` `{ ms: 0..30000 }`, `error` `{ status: 400..599 }`, `drop` and `corrupt` take none. `probability` is 0..1. Interactive docs are at `/docs`.
@@ -40,6 +53,63 @@ npm run test:e2e
 ```
 
 After changing `src/database/schema.ts`, run `npm run db:generate` and commit the new migration.
+
+## Deploy for free
+
+[DEPLOY.md](DEPLOY.md) puts the whole system online at no cost: the backend on Render (`render.yaml` Blueprint, with the Go proxy), Postgres on Neon, and the dashboard on Vercel. It covers every step and the free-plan limits.
+
+## Run everything in containers
+
+One command starts the whole system: Postgres, Redis, migrations, the control API, the ingest service, the proxy, the web dashboard, Prometheus and Grafana.
+
+```bash
+npm run stack:up       # uses the images CI publishes to ghcr.io (needs Docker)
+npm run stack:build    # builds the images from source instead
+npm run stack:down
+```
+
+- Dashboard http://localhost:3001, control API :3000, proxy :3100, ingest :3200, Prometheus :9090, Grafana :3300.
+- `stack:build` needs the three repos cloned side by side (`Chaos-Garden`, `chaos-garden-proxy`, `chaos-garden-web`), or `PROXY_SOURCE` / `WEB_SOURCE` pointing at them.
+- Images are published from `main`, so before the first merge only `stack:build` works. If the repos are private, their images are too: `docker login ghcr.io` first.
+- Migrations run as one-shot containers before the services start.
+- To proxy an API running on your machine, use the target base URL `http://host.docker.internal:<port>`.
+- This setup is for local use: a shared default `INTERNAL_API_KEY`, private targets allowed, and Grafana without login.
+
+Each service's image is a two-stage build on `node:22-bookworm-slim`: it builds with dev dependencies, then keeps only the production dependencies and compiled code, and runs as the unprivileged `node` user with a health check. `node dist/database/migrate.js` applies migrations with drizzle-orm's runtime migrator (no drizzle-kit in the image).
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and on `main`:
+
+1. **Event contract:** `contracts/manifest.json` must match the contract files.
+1. **Control API:** lint, build, unit tests, migrations, e2e tests against a Postgres service container.
+2. **Ingest service:** the same, against Postgres and Redis.
+3. **Images:** builds both Docker images on every PR, so a broken Dockerfile fails CI; on `main` it also pushes them to `ghcr.io/<owner>/chaos-garden-control-api` and `chaos-garden-ingest` (tags `main` and `sha-<commit>`).
+
+## Observability
+
+Each service (control API, ingest, proxy) has the same three pieces, in `src/observability/`:
+
+- **Request IDs.** Every request gets an `x-request-id` (a valid incoming one is kept). It is returned in the response, sent on every call to another service, and stored with each logged request, so one id follows a request from the browser through the proxy, control API and ingest service.
+- **Logs.** `LOG_FORMAT=json` writes one JSON object per line with `service`, `level`, `context` and the current `requestId`, plus an access-log line per request (method, route template, status, duration). The default stays human-readable for local development.
+- **Metrics.** `GET /metrics` in Prometheus format. Every service reports `http_server_requests_seconds` (rate, errors and duration by route template and status), Node.js runtime metrics, and its own metrics (proxy outcomes and rate-limit decisions; ingest events and consumer lag). Set `METRICS_TOKEN` to require a bearer token.
+
+Labels never contain garden ids, paths or other unbounded values: the route label is the template (`/gardens/:gardenId`), so the number of series stays small.
+
+**Prometheus and Grafana.** `npm run db:up` also starts Prometheus (http://localhost:9090), which scrapes the services running on your machine, and Grafana (http://localhost:3300, no login: local use only) with a preloaded **Chaos Garden** dashboard: request rate, error share and p95 latency per service, proxy outcomes (same colors as the web dashboard), rate-limit decisions, target response time, dropped events, ingest throughput, consumer lag, and runtime health. The dashboard is generated by `infra/grafana/build_dashboard.py`; edit that and rerun it rather than editing the JSON.
+
+## Rate limits
+
+- **Per garden (enforced by the proxy).** Each garden has `rateLimitRps` (default 10) and `rateLimitBurst` (default 20). The owner changes them with `PATCH /gardens/:gardenId`, up to 50 and 100. The proxy receives them in the garden config and runs a token bucket in Redis.
+- **Garden creation (enforced here).** `POST /gardens` allows `GARDEN_CREATE_LIMIT` gardens per IP address per `GARDEN_CREATE_WINDOW_MS` (default 10 per hour), then answers 429 with `Retry-After`. The counter lives in this process's memory, so with several instances each counts separately. Behind a reverse proxy, set `TRUST_PROXY=true` so the client's address is used.
+
+## Request logs and stats
+
+`/requests` (newest first, page back with `before=<nextBefore>`) and `/stats` (per-minute counts by outcome, default the last 60 minutes) are served by the separate ingest service. This API checks the garden's admin token, then reads from the ingest service at `INGEST_URL` with `INTERNAL_API_KEY`. If the ingest service is down, these two endpoints answer 503 and everything else keeps working.
+
+Outcomes: `ok`, `slow` (delayed), `error` (injected), `drop`, `corrupt`, `target_error` (the target itself returned 4xx/5xx), `no_response`, `rate_limited` (refused by the garden's rate limit).
+
+The compose file creates the ingest service's database (`chaos_ingest`) on first start via `infra/postgres-init/`. If your Postgres volume already exists, create it once by hand: `CREATE DATABASE chaos_ingest OWNER chaos;`
 
 ## Internal endpoint (for other services)
 

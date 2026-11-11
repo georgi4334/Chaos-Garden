@@ -5,6 +5,8 @@ import { faultRules, gardens, targets } from '../database/schema.js';
 
 export interface GardenConfig {
   gardenId: string;
+  /** Token bucket for the proxy: `rps` tokens per second, holding at most `burst`. */
+  rateLimit: { rps: number; burst: number };
   targets: Array<{
     id: string;
     name: string;
@@ -27,7 +29,7 @@ export class InternalService {
   /** Everything the proxy needs for one garden: targets and their enabled rules. */
   async getGardenConfig(gardenId: string): Promise<GardenConfig> {
     const [garden] = await this.db
-      .select({ id: gardens.id })
+      .select({ id: gardens.id, rps: gardens.rateLimitRps, burst: gardens.rateLimitBurst })
       .from(gardens)
       .where(eq(gardens.id, gardenId));
     if (!garden) throw new NotFoundException('Garden not found');
@@ -53,6 +55,7 @@ export class InternalService {
 
     return {
       gardenId,
+      rateLimit: { rps: garden.rps, burst: garden.burst },
       targets: targetRows.map((t) => ({
         id: t.id,
         name: t.name,

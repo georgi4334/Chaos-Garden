@@ -44,7 +44,7 @@ describe('Internal config endpoint (e2e)', () => {
     const h = { Authorization: `Bearer ${g.adminToken}` };
 
     const empty = await http().get(`/internal/gardens/${g.id}/config`).set(internal).expect(200);
-    expect(empty.body).toEqual({ gardenId: g.id, targets: [] });
+    expect(empty.body).toEqual({ gardenId: g.id, rateLimit: { rps: 10, burst: 20 }, targets: [] });
 
     const target = (
       await http()

@@ -1,0 +1,94 @@
+# Render Blueprint: Chaos Garden's backend on Render's free plan.
+# Postgres lives on Neon and the dashboard on Vercel; see DEPLOY.md for every step.
+#
+# Free-plan constraints this file is written around:
+# - Free web services sleep after 15 minutes without traffic (about a minute to wake).
+# - Free web services can't receive private-network traffic, so services call each
+#   other through their public onrender.com URLs (protected by INTERNAL_API_KEY).
+# - There is no pre-deploy command on free services, so migrations run at start-up.
+# - The free Key Value instance is in-memory only: a restart loses its data.
+
+envVarGroups:
+  - name: chaos-garden-shared
+    envVars:
+      # Generated once by Render (random 256-bit value), shared by all three services.
+      - key: INTERNAL_API_KEY
+        generateValue: true
+      # /metrics is on the public internet here, so require a token.
+      - key: METRICS_TOKEN
+        generateValue: true
+      - key: LOG_FORMAT
+        value: json
+      - key: EVENT_STREAM
+        value: chaos:requests
+
+services:
+  # Redis for request events (Streams) and the rate limiter. Internal only.
+  - type: keyvalue
+    name: chaos-garden-redis
+    plan: free
+    region: oregon
+    ipAllowList: [] # no access from the internet
+    maxmemoryPolicy: noeviction # never silently evict events; when full, the proxy drops new ones and counts them
+
+  - type: web
+    name: chaos-garden-control-api
+    runtime: image
+    plan: free
+    region: oregon
+    image:
+      url: ghcr.io/georgi4334/chaos-garden-control-api:main
+    dockerCommand: sh -c "node dist/database/migrate.js && exec node dist/main.js"
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: chaos-garden-shared
+      - key: DATABASE_URL
+        sync: false # Neon connection string (project "chaos-garden-control"), includes sslmode=require
+      - key: INGEST_URL
+        sync: false # public URL of chaos-garden-ingest, e.g. https://chaos-garden-ingest.onrender.com
+      - key: CORS_ORIGIN
+        sync: false # the dashboard's Vercel URL, e.g. https://chaos-garden-web.vercel.app
+      - key: TRUST_PROXY
+        value: "true" # behind Render's proxy: use the client's address for the garden creation limit
+
+  - type: web
+    name: chaos-garden-ingest
+    runtime: image
+    plan: free
+    region: oregon
+    image:
+      url: ghcr.io/georgi4334/chaos-garden-ingest:main
+    dockerCommand: sh -c "node dist/database/migrate.js && exec node dist/main.js"
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: chaos-garden-shared
+      - key: DATABASE_URL
+        sync: false # Neon connection string (project "chaos-garden-ingest")
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: chaos-garden-redis
+          property: connectionString
+
+  # The Go implementation: ~27 MB of memory and fast to wake, which suits free instances.
+  - type: web
+    name: chaos-garden-proxy
+    runtime: image
+    plan: free
+    region: oregon
+    image:
+      url: ghcr.io/georgi4334/chaos-garden-proxy-go:main
+    healthCheckPath: /health
+    envVars:
+      - fromGroup: chaos-garden-shared
+      - key: CONTROL_API_URL
+        sync: false # public URL of chaos-garden-control-api, e.g. https://chaos-garden-control-api.onrender.com
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: chaos-garden-redis
+          property: connectionString
+      - key: ALLOW_PRIVATE_TARGETS
+        value: "false" # never on the internet: blocks localhost, private networks and cloud metadata
+      - key: EVENT_STREAM_MAXLEN
+        value: "20000" # keep the stream small for the free in-memory Redis

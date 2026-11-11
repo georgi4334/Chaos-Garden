@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { AdminTokenGuard } from '../auth/admin-token.guard.js';
+import { CreationRateGuard } from './creation-rate.guard.js';
 import { CreateGardenDto, UpdateGardenDto } from './gardens.dto.js';
 import { GardensService } from './gardens.service.js';
 
@@ -20,6 +21,7 @@ export class GardensController {
 
   /** Public: anyone can plant a garden. The admin token is returned once. */
   @Post()
+  @UseGuards(CreationRateGuard)
   create(@Body() dto: CreateGardenDto) {
     return this.gardens.create(dto.name);
   }
@@ -34,8 +36,8 @@ export class GardensController {
   @Patch(':gardenId')
   @ApiBearerAuth()
   @UseGuards(AdminTokenGuard)
-  rename(@Param('gardenId') id: string, @Body() dto: UpdateGardenDto) {
-    return this.gardens.rename(id, dto.name);
+  update(@Param('gardenId') id: string, @Body() dto: UpdateGardenDto) {
+    return this.gardens.update(id, dto);
   }
 
   @Delete(':gardenId')

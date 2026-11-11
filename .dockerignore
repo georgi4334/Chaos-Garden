@@ -1,0 +1,14 @@
+# Keep the build context small and free of local state and secrets.
+node_modules
+dist
+coverage
+.git
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+test
+# The ingest service has its own image (ingest/Dockerfile).
+ingest
+infra
