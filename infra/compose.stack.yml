@@ -1,0 +1,106 @@
+# The whole Chaos Garden system in containers, on top of docker-compose.yml
+# (Postgres, Redis, Prometheus, Grafana). From the repo root:
+#
+#   npm run stack:up      # pull published images (or build them), migrate, start everything
+#   npm run stack:down
+#
+# Images come from GitHub Container Registry (published by each repo's CI on main).
+# To build from source instead, clone the three repos side by side and use `--build`:
+#   ~/code/Chaos-Garden   ~/code/chaos-garden-proxy   ~/code/chaos-garden-web
+# (or point PROXY_SOURCE / WEB_SOURCE at your clones).
+#
+# Local use only: a shared default internal key and private targets allowed.
+# Open the dashboard at http://localhost:3001. To proxy an API running on your
+# machine, give the target the base URL http://host.docker.internal:<port>.
+
+x-internal-key: &internal-key ${INTERNAL_API_KEY:-local-dev-internal-key}
+
+services:
+  # One-shot: applies the control API's migrations, then exits.
+  control-api-migrate:
+    image: ghcr.io/georgi4334/chaos-garden-control-api:main
+    build: ..
+    command: ["node", "dist/database/migrate.js"]
+    environment:
+      DATABASE_URL: postgres://chaos:chaos@postgres:5432/chaos_garden
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  control-api:
+    image: ghcr.io/georgi4334/chaos-garden-control-api:main
+    build: ..
+    environment:
+      DATABASE_URL: postgres://chaos:chaos@postgres:5432/chaos_garden
+      INTERNAL_API_KEY: *internal-key
+      INGEST_URL: http://ingest:3200
+      CORS_ORIGIN: http://localhost:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      control-api-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  ingest-migrate:
+    image: ghcr.io/georgi4334/chaos-garden-ingest:main
+    build: ../ingest
+    command: ["node", "dist/database/migrate.js"]
+    environment:
+      DATABASE_URL: postgres://chaos:chaos@postgres:5432/chaos_ingest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  ingest:
+    image: ghcr.io/georgi4334/chaos-garden-ingest:main
+    build: ../ingest
+    environment:
+      DATABASE_URL: postgres://chaos:chaos@postgres:5432/chaos_ingest
+      REDIS_URL: redis://redis:6379
+      INTERNAL_API_KEY: *internal-key
+    ports:
+      - "3200:3200"
+    depends_on:
+      ingest-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  proxy:
+    image: ghcr.io/georgi4334/chaos-garden-proxy:main
+    build: ${PROXY_SOURCE:-../../chaos-garden-proxy}
+    environment:
+      CONTROL_API_URL: http://control-api:3000
+      INTERNAL_API_KEY: *internal-key
+      REDIS_URL: redis://redis:6379
+      # Targets on your machine (host.docker.internal) are private addresses.
+      ALLOW_PRIVATE_TARGETS: "true"
+    ports:
+      - "3100:3100"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      control-api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/georgi4334/chaos-garden-web:main
+    build:
+      context: ${WEB_SOURCE:-../../chaos-garden-web}
+      args:
+        # Addresses the *browser* uses, so they point at your machine's published ports.
+        NEXT_PUBLIC_CONTROL_API_URL: http://localhost:3000
+        NEXT_PUBLIC_PROXY_URL: http://localhost:3100
+    ports:
+      - "3001:3001"
+    depends_on:
+      - control-api
+      - proxy
+    restart: unless-stopped
