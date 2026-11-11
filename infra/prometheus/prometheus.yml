@@ -1,0 +1,17 @@
+# Scrapes the Chaos Garden services running on your machine (npm run start:dev).
+# Every metric already carries a `service` label (control-api, proxy, ingest).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: chaos-garden
+    metrics_path: /metrics
+    # If you set METRICS_TOKEN on the services, uncomment and set the same token:
+    # authorization:
+    #   credentials: change-me
+    static_configs:
+      - targets:
+          - host.docker.internal:3000 # control API
+          - host.docker.internal:3100 # proxy
+          - host.docker.internal:3200 # ingest service

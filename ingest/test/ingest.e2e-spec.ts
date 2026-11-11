@@ -4,6 +4,7 @@ import { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
+import { configureApp } from '../src/app.setup.js';
 import { LogWriter } from '../src/logs/log-writer.js';
 import { RetentionService } from '../src/retention/retention.service.js';
 import type { RequestEventV1 } from '../src/stream/request-event.js';
@@ -42,6 +43,7 @@ async function startIngest(opts: { writer?: new (...args: never[]) => LogWriter 
   let builder = Test.createTestingModule({ imports: [AppModule] });
   if (opts.writer) builder = builder.overrideProvider(LogWriter).useClass(opts.writer);
   const app = (await builder.compile()).createNestApplication();
+  configureApp(app);
   await app.init();
   apps.push(app);
   return { app, stream, consumer: app.get(StreamConsumer) };
@@ -84,7 +86,7 @@ describe('Ingest service (e2e)', () => {
     const garden = randomUUID();
     const t1 = randomUUID();
     const t2 = randomUUID();
-    const first = event({ gardenId: garden, targetId: t1, path: '/users/1' });
+    const first = event({ gardenId: garden, targetId: t1, path: '/users/1', requestId: 'trace-0001-from-proxy' });
 
     await publish(stream, first);
     await publish(stream, event({ gardenId: garden, targetId: t1, status: 503, faults: ['error'], durationMs: 4 }));
@@ -102,7 +104,9 @@ describe('Ingest service (e2e)', () => {
 
     const logs = await http().get(`/internal/gardens/${garden}/requests`).set('x-internal-key', KEY).expect(200);
     expect(logs.body.items).toHaveLength(6);
-    expect(logs.body.items.filter((i: { id: string }) => i.id === first.id)).toHaveLength(1);
+    const stored = logs.body.items.filter((i: { id: string }) => i.id === first.id);
+    expect(stored).toHaveLength(1);
+    expect(stored[0].requestId).toBe('trace-0001-from-proxy');
     expect(logs.body.items.map((i: { outcome: string }) => i.outcome).sort()).toEqual(
       ['drop', 'error', 'ok', 'rate_limited', 'slow', 'target_error'].sort(),
     );
@@ -119,6 +123,12 @@ describe('Ingest service (e2e)', () => {
 
     await http().get(`/internal/gardens/${garden}/stats?minutes=0`).set('x-internal-key', KEY).expect(400);
     await http().get(`/internal/gardens/${garden}/requests?targetId=nope`).set('x-internal-key', KEY).expect(400);
+
+    const metrics = (await http().get('/metrics').expect(200)).text;
+    expect(metrics).toMatch(/chaos_ingest_events_total\{[^}]*result="stored"[^}]*\} [1-9]/);
+    expect(metrics).toMatch(/chaos_ingest_events_total\{[^}]*result="duplicate"[^}]*\} [1-9]/);
+    expect(metrics).toMatch(/chaos_ingest_consumer_lag\{[^}]*service="ingest"[^}]*\} 0/);
+    expect(metrics).toMatch(/chaos_ingest_batch_seconds_count\{[^}]*\} [1-9]/);
 
     const health = await http().get('/health').expect(200);
     expect(health.body).toMatchObject({ status: 'ok', db: 'up', redis: 'up', pending: 0 });

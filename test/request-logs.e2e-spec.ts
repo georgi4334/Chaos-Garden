@@ -13,12 +13,16 @@ describe('Request logs (e2e)', () => {
   let app: INestApplication;
   let ingest: http.Server;
   let ingestPort: number;
-  const seen: Array<{ url: string; key: string | undefined }> = [];
+  const seen: Array<{ url: string; key: string | undefined; requestId?: string }> = [];
 
   beforeAll(async () => {
     // Stub ingest service: checks the internal key and echoes what it was asked.
     ingest = http.createServer((req, res) => {
-      seen.push({ url: req.url ?? '', key: req.headers['x-internal-key'] as string | undefined });
+      seen.push({
+        url: req.url ?? '',
+        key: req.headers['x-internal-key'] as string | undefined,
+        requestId: req.headers['x-request-id'] as string | undefined,
+      });
       res.setHeader('content-type', 'application/json');
       if (req.headers['x-internal-key'] !== KEY) {
         res.statusCode = 401;
@@ -66,7 +70,9 @@ describe('Request logs (e2e)', () => {
     const logs = await request(app.getHttpServer())
       .get(`/gardens/${g.id}/requests?limit=20&targetId=${target}&before=2026-11-11T10:00:00.000Z`)
       .set(auth)
+      .set('x-request-id', 'dashboard-req-0001')
       .expect(200);
+    expect(seen[0].requestId).toBe('dashboard-req-0001'); // the same id reaches the ingest service
     expect(logs.body.stub).toBe(true);
     expect(seen[0].key).toBe(KEY);
     expect(seen[0].url).toBe(

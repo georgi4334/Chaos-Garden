@@ -27,5 +27,36 @@ services:
       timeout: 3s
       retries: 10
 
+  # Metrics: scrapes /metrics on the services running on your machine. UI on http://localhost:9090
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # lets the container reach services on your machine (Linux too)
+
+  # Dashboards on http://localhost:3300 (3000 is the control API). The "Chaos Garden" dashboard is preloaded.
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3300:3000"
+    environment:
+      # Local development only: no login. Never expose this setup publicly.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
 volumes:
   pgdata:
+  promdata:

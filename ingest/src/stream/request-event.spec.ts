@@ -21,6 +21,7 @@ describe('parseEntry', () => {
   it('accepts a valid event, including a null status', () => {
     expect(parseEntry(entry(valid))).toEqual({ ok: true, event: valid });
     expect(parseEntry(entry({ ...valid, status: null, completed: false })).ok).toBe(true);
+    expect(parseEntry(entry({ ...valid, requestId: 'trace-0001-from-proxy' })).ok).toBe(true);
   });
 
   it.each([
@@ -34,6 +35,7 @@ describe('parseEntry', () => {
     ['negative duration', entry({ ...valid, durationMs: -1 })],
     ['faults not strings', entry({ ...valid, faults: [1] })],
     ['missing completed', entry({ ...valid, completed: undefined })],
+    ['unsafe request id', entry({ ...valid, requestId: 'has spaces in it' })],
   ])('rejects %s', (_label, fields) => {
     const result = parseEntry(fields as string[]);
     expect(result.ok).toBe(false);

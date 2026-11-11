@@ -9,6 +9,7 @@ import {
 import type { Redis } from 'ioredis';
 import { INGEST_CONFIG, type IngestConfig } from '../config/ingest-config.js';
 import { LogWriter } from '../logs/log-writer.js';
+import { batchDuration, batchFailures, eventsProcessed, setLagSource } from '../observability/ingest-metrics.js';
 import { REDIS, REDIS_BLOCKING } from './redis.providers.js';
 import { parseEntry, type RequestEventV1 } from './request-event.js';
 
@@ -48,6 +49,7 @@ export class StreamConsumer
   ) {}
 
   async onApplicationBootstrap() {
+    setLagSource(() => this.lag());
     await this.ensureGroup();
     if (this.config.autoStart) this.start();
   }
@@ -105,6 +107,7 @@ export class StreamConsumer
         if (result) await this.handle(result[0][1]);
       } catch (err) {
         this.counters.failedBatches++;
+        batchFailures.inc();
         this.logger.error(`Batch failed, will retry: ${(err as Error).message}`);
         await sleep(1000);
       }
@@ -125,10 +128,14 @@ export class StreamConsumer
     }
     if (good.length === 0) return;
 
+    const endTimer = batchDuration.startTimer();
     const stored = await this.writer.write(good.map((g) => g.event));
     this.counters.stored += stored;
     this.counters.duplicates += good.length - stored;
     await this.ack(good.map((g) => g.id));
+    endTimer();
+    eventsProcessed.inc({ result: 'stored' }, stored);
+    if (good.length > stored) eventsProcessed.inc({ result: 'duplicate' }, good.length - stored);
   }
 
   /**
@@ -193,7 +200,8 @@ export class StreamConsumer
     );
     await this.ack([id]);
     this.counters.deadLettered++;
-    this.logger.warn(`Dead-lettered ${id}: ${reason}`);
+    eventsProcessed.inc({ result: 'dead_lettered' });
+    this.logger.warn({ msg: 'Dead-lettered event', streamId: id, reason, requestId: requestIdOf(fields) });
   }
 
   private async ack(ids: string[]) {
@@ -211,5 +219,17 @@ export class StreamConsumer
       }
     }
     return { pending: 0, lag: null };
+  }
+}
+
+/** Best effort: the request id inside an event's JSON, for logging a dead-lettered entry. */
+function requestIdOf(fields: string[]): string | undefined {
+  const i = fields.indexOf('data');
+  if (i === -1) return undefined;
+  try {
+    const id = (JSON.parse(fields[i + 1]) as { requestId?: unknown }).requestId;
+    return typeof id === 'string' ? id : undefined;
+  } catch {
+    return undefined;
   }
 }

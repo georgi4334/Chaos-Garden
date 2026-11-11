@@ -40,6 +40,7 @@ export class LogsQueryService {
         durationMs: requestLogs.durationMs,
         faults: requestLogs.faults,
         occurredAt: requestLogs.occurredAt,
+        requestId: requestLogs.requestId,
       })
       .from(requestLogs)
       .where(and(...where))

@@ -15,6 +15,13 @@
       "when": 1794389559463,
       "tag": "0001_wandering_groot",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794391210302,
+      "tag": "0002_dazzling_doorman",
+      "breakpoints": true
     }
   ]
 }

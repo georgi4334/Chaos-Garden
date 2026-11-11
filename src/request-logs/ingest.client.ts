@@ -1,5 +1,6 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { currentRequestId, REQUEST_ID_HEADER } from '../observability/request-context.js';
 
 /**
  * Talks to the ingest service, which owns request logs and stats. The control
@@ -23,7 +24,10 @@ export class IngestClient {
     let res: Response;
     try {
       res = await fetch(`${base}${path}${qs ? `?${qs}` : ''}`, {
-        headers: { 'x-internal-key': this.config.get<string>('INTERNAL_API_KEY') ?? '' },
+        headers: {
+          'x-internal-key': this.config.get<string>('INTERNAL_API_KEY') ?? '',
+          [REQUEST_ID_HEADER]: currentRequestId() ?? '',
+        },
         signal: AbortSignal.timeout(5000),
       });
     } catch (err) {

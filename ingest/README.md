@@ -21,6 +21,7 @@ This service owns its own database (`chaos_ingest`). Nothing else writes to it, 
 - **Malformed events** go straight to the dead-letter stream.
 - **Stats** are aggregated per garden, target and minute in the same transaction as the logs, from only the rows that were actually inserted.
 - **Retention.** Logs older than `LOG_RETENTION_DAYS` and stats older than `STATS_RETENTION_DAYS` are deleted hourly.
+- **Request IDs.** Each event's `requestId` (the proxy's `x-request-id`) is stored with the log row and returned by the internal API, so a logged request can be found in every service's logs.
 - **Shutdown.** On SIGTERM it stops reading, finishes the current batch, then closes connections.
 
 Outcomes: `ok`, `slow`, `error` (injected), `drop`, `corrupt`, `target_error` (the target itself returned 4xx/5xx), `no_response`, `rate_limited` (the proxy refused it because of the garden's rate limit).
@@ -34,6 +35,7 @@ All routes need the `x-internal-key` header to match `INTERNAL_API_KEY`. The con
 | `GET /internal/gardens/:gardenId/requests?limit=50&targetId=&before=` | newest first, plus `nextBefore` for the next page |
 | `GET /internal/gardens/:gardenId/stats?minutes=60&targetId=` | per-minute buckets and totals by outcome, with average duration |
 | `GET /health` | Postgres and Redis status, consumer group `pending` and `lag`, counters |
+| `GET /metrics` | Prometheus metrics: `chaos_ingest_events_total{result}`, batch time and failures, consumer lag and pending, HTTP and runtime metrics (no internal key; set `METRICS_TOKEN` to protect it) |
 
 ## Development
 
