@@ -212,7 +212,7 @@
     {
       "type": "timeseries",
       "title": "Proxied requests by outcome",
-      "description": "Stacked. \"other\" is an error from the target, no response, or refused by a garden's rate limit (the same grouping as the web dashboard).",
+      "description": "Stacked, in the same order and colors as the web dashboard. \"other\" is an error from the target, no response, or refused by a garden's rate limit.",
       "targets": [
         {
           "refId": "A",
@@ -220,8 +220,53 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (outcome) (label_replace(rate(chaos_proxy_requests_total[$__rate_interval]), \"outcome\", \"other\", \"outcome\", \"target_error|no_response|rate_limited\"))",
-          "legendFormat": "{{outcome}}"
+          "expr": "sum(rate(chaos_proxy_requests_total{outcome=\"ok\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "ok"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(chaos_proxy_requests_total{outcome=\"slow\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "slow"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(chaos_proxy_requests_total{outcome=\"error\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "error"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(chaos_proxy_requests_total{outcome=\"corrupt\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "corrupt"
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(chaos_proxy_requests_total{outcome=\"drop\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "drop"
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(chaos_proxy_requests_total{outcome=~\"target_error|no_response|rate_limited\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "other"
         }
       ],
       "fieldConfig": {
