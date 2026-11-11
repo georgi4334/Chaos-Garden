@@ -50,6 +50,7 @@ export const requestStatsMinute = pgTable(
     corrupt: integer('corrupt').notNull().default(0),
     targetError: integer('target_error').notNull().default(0),
     noResponse: integer('no_response').notNull().default(0),
+    rateLimited: integer('rate_limited').notNull().default(0),
     durationMsSum: bigint('duration_ms_sum', { mode: 'number' }).notNull().default(0),
   },
   (t) => [

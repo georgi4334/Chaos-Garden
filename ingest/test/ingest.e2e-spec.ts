@@ -91,24 +91,25 @@ describe('Ingest service (e2e)', () => {
     await publish(stream, event({ gardenId: garden, targetId: t1, status: null, completed: false, faults: ['drop'] }));
     await publish(stream, event({ gardenId: garden, targetId: t1, faults: ['latency'], durationMs: 800 }));
     await publish(stream, event({ gardenId: garden, targetId: t2, status: 404 }));
+    await publish(stream, event({ gardenId: garden, targetId: t2, status: 429, faults: ['rate_limited'], durationMs: 1 }));
     await publish(stream, first); // duplicate delivery of the same event
 
-    await waitFor(() => consumer.counters.stored === 5 && consumer.counters.duplicates === 1);
+    await waitFor(() => consumer.counters.stored === 6 && consumer.counters.duplicates === 1);
     await waitFor(async () => (await pendingCount(stream)) === 0);
 
     const http = () => request(app.getHttpServer());
     await http().get(`/internal/gardens/${garden}/requests`).expect(401);
 
     const logs = await http().get(`/internal/gardens/${garden}/requests`).set('x-internal-key', KEY).expect(200);
-    expect(logs.body.items).toHaveLength(5);
+    expect(logs.body.items).toHaveLength(6);
     expect(logs.body.items.filter((i: { id: string }) => i.id === first.id)).toHaveLength(1);
     expect(logs.body.items.map((i: { outcome: string }) => i.outcome).sort()).toEqual(
-      ['drop', 'error', 'ok', 'slow', 'target_error'].sort(),
+      ['drop', 'error', 'ok', 'rate_limited', 'slow', 'target_error'].sort(),
     );
 
     const stats = await http().get(`/internal/gardens/${garden}/stats?minutes=5`).set('x-internal-key', KEY).expect(200);
-    expect(stats.body.totals).toMatchObject({ total: 5, ok: 1, slow: 1, error: 1, drop: 1, targetError: 1, corrupt: 0 });
-    expect(stats.body.totals.avgDurationMs).toBe(Math.round((20 + 4 + 20 + 800 + 20) / 5));
+    expect(stats.body.totals).toMatchObject({ total: 6, ok: 1, slow: 1, error: 1, drop: 1, targetError: 1, rateLimited: 1, corrupt: 0 });
+    expect(stats.body.totals.avgDurationMs).toBe(Math.round((20 + 4 + 20 + 800 + 20 + 1) / 6));
 
     const onlyT1 = await http()
       .get(`/internal/gardens/${garden}/stats?minutes=5&targetId=${t1}`)

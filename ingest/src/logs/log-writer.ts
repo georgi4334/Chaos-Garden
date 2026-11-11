@@ -67,6 +67,7 @@ export class LogWriter {
             corrupt: add('corrupt'),
             targetError: add('targetError'),
             noResponse: add('noResponse'),
+            rateLimited: add('rateLimited'),
             durationMsSum: add('durationMsSum'),
           },
         });

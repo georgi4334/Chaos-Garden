@@ -23,7 +23,7 @@ This service owns its own database (`chaos_ingest`). Nothing else writes to it, 
 - **Retention.** Logs older than `LOG_RETENTION_DAYS` and stats older than `STATS_RETENTION_DAYS` are deleted hourly.
 - **Shutdown.** On SIGTERM it stops reading, finishes the current batch, then closes connections.
 
-Outcomes: `ok`, `slow`, `error` (injected), `drop`, `corrupt`, `target_error` (the target itself returned 4xx/5xx), `no_response`.
+Outcomes: `ok`, `slow`, `error` (injected), `drop`, `corrupt`, `target_error` (the target itself returned 4xx/5xx), `no_response`, `rate_limited` (the proxy refused it because of the garden's rate limit).
 
 ## Internal API
 

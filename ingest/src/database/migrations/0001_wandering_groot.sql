@@ -1,0 +1,1 @@
+ALTER TABLE "request_stats_minute" ADD COLUMN "rate_limited" integer DEFAULT 0 NOT NULL;

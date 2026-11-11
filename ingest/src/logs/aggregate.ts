@@ -20,6 +20,7 @@ export interface MinuteBucket {
   corrupt: number;
   targetError: number;
   noResponse: number;
+  rateLimited: number;
   durationMsSum: number;
 }
 
@@ -31,6 +32,7 @@ const OUTCOME_COLUMN: Record<Outcome, keyof MinuteBucket> = {
   corrupt: 'corrupt',
   target_error: 'targetError',
   no_response: 'noResponse',
+  rate_limited: 'rateLimited',
 };
 
 export function minuteOf(date: Date): Date {
@@ -57,6 +59,7 @@ export function aggregateByMinute(rows: LoggedRequest[]): MinuteBucket[] {
         corrupt: 0,
         targetError: 0,
         noResponse: 0,
+        rateLimited: 0,
         durationMsSum: 0,
       };
       buckets.set(key, b);
