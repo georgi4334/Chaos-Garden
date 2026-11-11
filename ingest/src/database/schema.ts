@@ -29,6 +29,8 @@ export const requestLogs = pgTable(
     outcome: text('outcome').notNull(),
     faults: text('faults').array().notNull().default([]),
     ruleIds: text('rule_ids').array().notNull().default([]),
+    /** x-request-id from the proxy: search for it in any service's logs. */
+    requestId: text('request_id'),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     ingestedAt: timestamp('ingested_at', { withTimezone: true }).notNull().defaultNow(),
   },

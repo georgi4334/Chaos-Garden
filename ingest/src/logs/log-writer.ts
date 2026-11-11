@@ -33,6 +33,7 @@ export class LogWriter {
             outcome: classify(e),
             faults: e.faults,
             ruleIds: e.ruleIds,
+            requestId: e.requestId ?? null,
             occurredAt: new Date(e.at),
           })),
         )

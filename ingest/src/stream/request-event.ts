@@ -13,6 +13,8 @@ export interface RequestEventV1 {
   durationMs: number;
   faults: string[];
   ruleIds: string[];
+  /** The request's x-request-id (newer proxies only). */
+  requestId?: string;
 }
 
 export type Outcome =
@@ -64,6 +66,9 @@ export function parseEntry(fields: string[]): ParseResult {
   if (typeof e.completed !== 'boolean') return { ok: false, reason: 'completed must be a boolean' };
   if (!Number.isFinite(e.durationMs) || (e.durationMs as number) < 0) return { ok: false, reason: 'durationMs must be >= 0' };
   if (!isStringArray(e.faults) || !isStringArray(e.ruleIds)) return { ok: false, reason: 'faults and ruleIds must be string arrays' };
+  if (e.requestId !== undefined && !(typeof e.requestId === 'string' && /^[A-Za-z0-9._:-]{8,128}$/.test(e.requestId))) {
+    return { ok: false, reason: 'requestId must be a plain id of 8 to 128 characters' };
+  }
   return { ok: true, event: e as RequestEventV1 };
 }
 
