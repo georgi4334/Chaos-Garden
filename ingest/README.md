@@ -18,7 +18,7 @@ This service owns its own database (`chaos_ingest`). Nothing else writes to it, 
 - **At-least-once.** An event is acknowledged (`XACK`) only after its batch is committed to Postgres. If the service crashes mid-batch, the events stay pending and are picked up again.
 - **Idempotent writes.** The proxy's event id is the primary key, so an event delivered twice is stored and counted once.
 - **Retries.** Events left unacknowledged for `CLAIM_IDLE_MS` are claimed again (`XPENDING` + `XCLAIM`). After `MAX_DELIVERIES` attempts they move to the dead-letter stream (`chaos:requests:dead`) with the reason.
-- **Malformed events** go straight to the dead-letter stream.
+- **Malformed events** go straight to the dead-letter stream. What counts as malformed is the request-event contract in `../contracts/`; `src/stream/contract.spec.ts` checks the parser agrees with it on every example event.
 - **Stats** are aggregated per garden, target and minute in the same transaction as the logs, from only the rows that were actually inserted.
 - **Retention.** Logs older than `LOG_RETENTION_DAYS` and stats older than `STATS_RETENTION_DAYS` are deleted hourly.
 - **Request IDs.** Each event's `requestId` (the proxy's `x-request-id`) is stored with the log row and returned by the internal API, so a logged request can be found in every service's logs.

@@ -10,6 +10,7 @@ This repository is the **control API** (NestJS + TypeScript + Postgres via Drizz
 |---|---|
 | `/` (`src/`, `test/`) | the control API |
 | `ingest/` | the ingest service: a separate Node project with its own `package.json`, database and tests ([README](ingest/README.md)) |
+| `contracts/` | the request-event contract (JSON Schema and example events) shared with the proxy ([README](contracts/README.md)) |
 | `infra/` | Docker Compose for Postgres, Redis, Prometheus and Grafana, plus their config |
 
 The root `npm test` and build cover only the control API. Run the ingest service's commands from `ingest/`.
@@ -76,6 +77,7 @@ Each service's image is a two-stage build on `node:22-bookworm-slim`: it builds 
 
 `.github/workflows/ci.yml` runs on every pull request and on `main`:
 
+1. **Event contract:** `contracts/manifest.json` must match the contract files.
 1. **Control API:** lint, build, unit tests, migrations, e2e tests against a Postgres service container.
 2. **Ingest service:** the same, against Postgres and Redis.
 3. **Images:** builds both Docker images on every PR, so a broken Dockerfile fails CI; on `main` it also pushes them to `ghcr.io/<owner>/chaos-garden-control-api` and `chaos-garden-ingest` (tags `main` and `sha-<commit>`).
